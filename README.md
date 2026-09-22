@@ -7,7 +7,7 @@
 
 **NeuroDB** is a production-style, hybrid database system that combines a high-performance **C++ engine** (query parsing, AST execution, file-based persistence, and indexing) with an **AI-driven Python interface layer** and an interactive **Streamlit frontend**.
 
-It supports standard SQL commands (`CREATE`, `INSERT`, `SELECT`, `UPDATE`, `DELETE`, `GROUP BY`, `HAVING`), Natural Language query translation via Google Gemini AI (with a robust offline rule-based fallback parser), query validation, auto-correction hints, latency tracking, and query execution logging.
+It supports standard SQL commands (`CREATE`, `INSERT`, `SELECT`, `UPDATE`, `DELETE`, `GROUP BY`, `HAVING`), Natural Language query translation via Google Gemini AI (with a robust offline rule-based fallback parser), query validation, auto-correction hints, latency tracking, query execution logging, and an **automatic Python/Pandas fallback engine** for cloud deployments (e.g., Streamlit Cloud).
 
 ---
 
@@ -32,11 +32,11 @@ NeuroDB is structured as a three-tier hybrid architecture:
                                  │ High-Speed CLI / IPC Subprocess
                                  ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                     C++ Core Database Engine                    │
-│  ┌────────────────────┐ ┌──────────────────┐ ┌────────────────┐ │
-│  │ AST Query Parser   │ │ Index & Execution│ │ CSV Storage    │ │
-│  │ (Tokenizing & AST) │ │ Engine (Fast PK) │ │ Persistence    │ │
-│  └────────────────────┘ └──────────────────┘ └────────────────┘ │
+│                  Hybrid Query Execution Core                    │
+│  ┌──────────────────────────────┐ ┌───────────────────────────┐ │
+│  │  C++ Core Database Engine    │ │ Python/Pandas Fallback    │ │
+│  │  (Primary Local Engine)      │ │ (Streamlit Cloud Fallback)│ │
+│  └──────────────────────────────┘ └───────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -45,6 +45,7 @@ NeuroDB is structured as a three-tier hybrid architecture:
 ## ✨ Features
 
 - **Hybrid C++/Python System**: High-speed C++ engine core executed via a Python `subprocess` connector with sub-millisecond inter-process latency.
+- **Automatic Cloud Fallback Engine**: Seamlessly falls back to an in-memory Pandas engine when running on Linux containers / Streamlit Cloud where native binaries differ. Loads schema and executes `SELECT *` queries smoothly without UI or architectural changes.
 - **Natural Language to SQL (AI Integration)**: Convert plain English prompts into valid SQL.
   - *Example*: `"show students with marks greater than 80"` $\rightarrow$ `SELECT * FROM students WHERE marks > 80;`
   - Uses **Google Gemini API** when online and falls back to a **Pattern-Matching Regex Engine** offline.
@@ -81,8 +82,9 @@ NeuroDB/
 │   ├── query_validator.py       # Syntax validator and fuzzy typo corrector
 │   └── query_logger.py          # JSON log audit manager
 ├── frontend/                    # Streamlit Frontend Web App
-│   ├── app.py                   # Streamlit dashboard
+│   ├── app.py                   # Streamlit dashboard (with automatic C++ / Pandas fallback)
 │   └── style.css                # Custom glassmorphic CSS theme
+├── data/                        # CSV & Metadata storage directory
 ├── logs/                        # Persistent Query Execution Logs
 │   └── query_history.json
 ├── scripts/                     # Build Scripts
@@ -142,7 +144,7 @@ python -m unittest discover -s tests
 To share your live web application online:
 
 1. **Push Code to GitHub**:
-   Ensure your repository is pushed to GitHub (e.g., `https://github.com/Dhanya562004/neurodb-ai-database-engine.git`).
+   Ensure your repository is pushed to GitHub (`https://github.com/Dhanya562004/neurodb-ai-database-engine.git`).
 2. **Connect Streamlit Community Cloud**:
    - Go to [share.streamlit.io](https://share.streamlit.io/) and log in with your GitHub account.
    - Click **New app**.
@@ -154,13 +156,13 @@ To share your live web application online:
      GEMINI_API_KEY = "your_google_gemini_api_key"
      ```
 4. **Deploy**:
-   - Click **Deploy!** Your app will build and publish a live public URL.
+   - Click **Deploy!** Your app will build and publish a live public URL. (The built-in fallback system will automatically power schema loading and query execution seamlessly on Streamlit Cloud).
 
 ---
 
 ## 📝 Resume Bullet Points (Software Engineer Role)
 
-- **Engineered a Hybrid AI Database System**: Architected a production-grade multi-tier database engine integrating a C++ core execution backend with a Python interface layer and Streamlit web UI, achieving sub-millisecond IPC query latency.
+- **Engineered a Hybrid AI Database System**: Architected a production-grade multi-tier database engine integrating a C++ core execution backend with a Python interface layer and Streamlit web UI, featuring sub-millisecond IPC query latency and automatic cloud fallback.
 - **LLM-Powered Query Processing**: Integrated Google Gemini API with an offline pattern-matching fallback parser to translate natural language prompts into executable SQL queries, featuring automated syntax validation and typo auto-correction.
 - **File-Based Storage & Query Performance**: Implemented file-based persistence for relational tables (`.meta`/`.csv`), Primary Key index hash lookups, aggregate functions (`GROUP BY`/`HAVING`), and persistent query execution audit logging.
 
