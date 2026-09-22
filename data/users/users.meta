@@ -1,0 +1,6 @@
+columns:
+id|INT|1|1
+name|VARCHAR|50|0
+email|VARCHAR|255|1
+age|INT|1|1
+pk:id

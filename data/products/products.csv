@@ -1,0 +1,6 @@
+id,name,price,stock,category
+101,Laptop,999.99,15,Electronics
+102,Mouse,25.50,50,Electronics
+103,Keyboard,75.00,30,Electronics
+104,Monitor,299.99,20,Electronics
+105,Desk Chair,150.00,10,Furniture

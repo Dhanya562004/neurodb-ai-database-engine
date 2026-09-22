@@ -1,0 +1,7 @@
+columns:
+student_id|INT|1|1
+name|VARCHAR|255|0
+major|VARCHAR|255|1
+gpa|DOUBLE|1|1
+marks|INT|1|1
+pk:student_id

@@ -1,0 +1,7 @@
+columns:
+id|INT|1|1
+name|VARCHAR|255|0
+salary|DOUBLE|1|0
+department|VARCHAR|255|0
+hire_date|DATE|1|1
+pk:id
