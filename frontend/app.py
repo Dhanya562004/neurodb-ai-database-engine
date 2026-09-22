@@ -3,36 +3,129 @@ import pandas as pd
 import sys
 import os
 import time
+import re
 
-# Ensure project root is in python path
+# ------------------ PATH SETUP ------------------
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from python_wrapper import NeuroDBConnector, AITranslator, QueryValidator, QueryLogger
 
-# Page configuration
+# ------------------ FALLBACK FUNCTIONS ------------------
+
+def load_tables_fallback():
+    tables = {}
+    data_path = os.path.join(BASE_DIR, "data")
+
+    if not os.path.exists(data_path):
+        st.error("❌ Data folder not found. Please add CSV files to /data in GitHub.")
+        return tables
+
+    for root, _, files in os.walk(data_path):
+        for file in files:
+            if file.endswith(".csv"):
+                try:
+                    name = os.path.splitext(file)[0].lower()
+                    file_path = os.path.join(root, file)
+                    tables[name] = pd.read_csv(file_path)
+                except Exception:
+                    pass
+
+    return tables
+
+
+def get_fallback_schema(tables):
+    schema = []
+    for name, df in tables.items():
+        schema.append({
+            "name": name,
+            "columns": [{"name": col, "type": str(df[col].dtype)} for col in df.columns],
+            "row_count": len(df)
+        })
+    return schema
+
+
+def execute_fallback_query(sql, tables):
+    sql = sql.strip().rstrip(";")
+
+    match = re.search(
+        r"SELECT\s+\*\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+(.+))?",
+        sql,
+        re.IGNORECASE
+    )
+
+    if not match:
+        return {
+            "success": False,
+            "dataframe": pd.DataFrame(),
+            "error": "Only SELECT * FROM table supported in fallback",
+            "row_count": 0,
+            "execution_time_ms": 1
+        }
+
+    table_name = match.group(1).lower()
+    where_clause = match.group(2)
+
+    if table_name not in tables:
+        return {
+            "success": False,
+            "dataframe": pd.DataFrame(),
+            "error": f"Table '{table_name}' not found",
+            "row_count": 0,
+            "execution_time_ms": 1
+        }
+
+    df = tables[table_name].copy()
+
+    # WHERE support
+    if where_clause:
+        try:
+            cond = re.search(r"(\w+)\s*(=|>|<|>=|<=)\s*(.+)", where_clause)
+            if cond:
+                col, op, val = cond.groups()
+                val = val.strip("'\"")
+
+                if col in df.columns:
+                    if pd.api.types.is_numeric_dtype(df[col]):
+                        val = float(val) if "." in val else int(val)
+
+                    if op == "=":
+                        df = df[df[col] == val]
+                    elif op == ">":
+                        df = df[df[col] > val]
+                    elif op == "<":
+                        df = df[df[col] < val]
+                    elif op == ">=":
+                        df = df[df[col] >= val]
+                    elif op == "<=":
+                        df = df[df[col] <= val]
+        except:
+            pass
+
+    return {
+        "success": True,
+        "dataframe": df,
+        "row_count": len(df),
+        "execution_time_ms": 1
+    }
+
+# ------------------ PAGE CONFIG ------------------
+
 st.set_page_config(
-    page_title="NeuroDB - AI Database Engine",
+    page_title="NeuroDB",
     page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# Load Custom CSS
-def load_css():
-    css_path = os.path.join(os.path.dirname(__file__), "style.css")
-    if os.path.exists(css_path):
-        with open(css_path, "r") as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+# ------------------ INIT ------------------
 
-load_css()
-
-# Initialize Singletons in Session State
 if "connector" not in st.session_state:
     st.session_state.connector = NeuroDBConnector()
+
 if "translator" not in st.session_state:
     st.session_state.translator = AITranslator()
+
 if "logger" not in st.session_state:
     st.session_state.logger = QueryLogger()
 
@@ -40,148 +133,103 @@ connector = st.session_state.connector
 translator = st.session_state.translator
 logger = st.session_state.logger
 
-# Sidebar Header & Schema Inspector
-st.sidebar.markdown("""
-<div style="text-align: center; padding: 10px 0;">
-    <h2 style="color: #6C5CE7; margin-bottom: 0;">⚡ NeuroDB</h2>
-    <p style="color: #A0AEC0; font-size: 0.85rem;">AI-Powered File-Based Engine</p>
-</div>
-""", unsafe_allow_html=True)
+# ------------------ LOAD SCHEMA ------------------
 
-st.sidebar.divider()
+try:
+    schema_data = connector.get_schema()
+    if not schema_data:
+        raise Exception("Empty schema")
+except:
+    tables = load_tables_fallback()
+    schema_data = get_fallback_schema(tables)
 
-# Database Schema Explorer
-st.sidebar.subheader("📊 Database Schema Explorer")
-schema_data = connector.get_schema()
+# ------------------ SIDEBAR ------------------
+
+st.sidebar.title("⚡ NeuroDB")
+st.sidebar.subheader("📊 Schema")
 
 if schema_data:
     for table in schema_data:
-        tbl_name = table.get("name", "table")
-        col_count = len(table.get("columns", []))
-        row_cnt = table.get("row_count", 0)
-        
-        with st.sidebar.expander(f"📁 {tbl_name} ({row_cnt} rows, {col_count} cols)"):
-            cols_df = pd.DataFrame(table.get("columns", []))
-            if not cols_df.empty:
-                st.dataframe(cols_df, use_container_width=True, hide_index=True)
+        with st.sidebar.expander(f"{table['name']} ({table['row_count']} rows)"):
+            st.dataframe(pd.DataFrame(table["columns"]))
 else:
-    st.sidebar.warning("No tables loaded or engine unreachable.")
+    st.sidebar.warning("No tables available")
 
-st.sidebar.divider()
+# ------------------ MAIN ------------------
 
-# Sample Queries Section
-st.sidebar.subheader("💡 Quick Sample Queries")
-sample_queries = [
-    ("NL", "show students with marks greater than 80"),
-    ("NL", "get employees in IT department"),
-    ("SQL", "SELECT * FROM students;"),
-    ("SQL", "SELECT * FROM products WHERE price < 100;"),
-    ("SQL", "SELECT department, AVG(salary) FROM employees GROUP BY department;")
-]
+st.title("NeuroDB AI Database Engine")
 
-for mode_type, q_text in sample_queries:
-    if st.sidebar.button(f"[{mode_type}] {q_text[:30]}...", key=f"btn_{q_text}"):
-        st.session_state.current_query = q_text
-        st.session_state.query_mode = "Natural Language (AI)" if mode_type == "NL" else "SQL Query"
-
-# Main App Header
-st.markdown("""
-<div class="hero-container">
-    <h1 class="hero-title">NeuroDB AI Database Engine</h1>
-    <p class="hero-subtitle">Production-grade C++ Storage & Query Processor with Python Wrapper & Natural Language AI Translation</p>
-</div>
-""", unsafe_allow_html=True)
-
-# Query Input Mode Selection
-query_mode = st.radio(
-    "Select Query Input Mode:",
-    ["Natural Language (AI)", "SQL Query"],
-    horizontal=True,
-    key="query_mode"
+mode = st.radio(
+    "Mode",
+    ["Natural Language (AI)", "SQL Query"]
 )
 
-# Text area query input
-default_q = st.session_state.get("current_query", "show students with marks greater than 80" if query_mode == "Natural Language (AI)" else "SELECT * FROM students;")
-user_input = st.text_area(
-    "Enter your query:",
-    value=default_q,
-    height=100,
-    placeholder="e.g. show students with marks greater than 80 or SELECT * FROM students WHERE marks > 80;"
-)
+query = st.text_area("Enter Query")
 
-col1, col2, col3 = st.columns([1, 2, 1])
-with col1:
-    execute_btn = st.button("🚀 Execute Query", type="primary", use_container_width=True)
+if st.button("Execute") and query.strip():
 
-if execute_btn and user_input.strip():
-    raw_prompt = user_input.strip()
-    target_sql = raw_prompt
-    translation_info = None
+    raw_query = query.strip()
+    sql = raw_query
 
-    # Step 1: Natural Language Translation if selected
-    if query_mode == "Natural Language (AI)":
-        with st.spinner("🤖 Translating Natural Language to SQL..."):
-            translation_info = translator.translate(raw_prompt, schema_data)
-            target_sql = translation_info["sql"]
+    # NL → SQL
+    if mode == "Natural Language (AI)":
+        try:
+            res = translator.translate(raw_query, schema_data)
+            sql = res["sql"]
+            st.info(f"Generated SQL: {sql}")
+        except:
+            st.warning("AI translation failed")
 
-    # Step 2: Query Validation & Hinting
-    validation = QueryValidator.validate(target_sql)
-    if validation.get("has_corrections") and validation.get("suggestion"):
-        st.info(f"💡 **Syntax Hint / Correction**: {validation['suggestion']}")
-        target_sql = validation["corrected_query"]
+    # Validate
+    validation = QueryValidator.validate(sql)
+    if validation.get("has_corrections"):
+        sql = validation["corrected_query"]
 
-    # Display Generated SQL preview if in NL mode
-    if translation_info:
-        st.markdown(f"**Generated SQL Query**: `{target_sql}` *(via {translation_info['mode']})*")
+    # Execute
+    start = time.time()
 
-    # Step 3: Subprocess Execution on C++ Engine
-    with st.spinner("⚡ Executing query on C++ engine..."):
-        result = connector.execute_query(target_sql)
+    try:
+        result = connector.execute_query(sql)
 
-    # Step 4: Log query to JSON history
+        if not result.get("success"):
+            raise Exception("Engine failed")
+
+    except:
+        tables = load_tables_fallback()
+        result = execute_fallback_query(sql, tables)
+
+    end = time.time()
+    result["execution_time_ms"] = round((end - start) * 1000, 2)
+
+    # Log
     logger.log(
-        raw_query=raw_prompt,
-        executed_sql=target_sql,
-        mode=query_mode,
+        raw_query=raw_query,
+        executed_sql=sql,
+        mode=mode,
         duration_ms=result["execution_time_ms"],
         success=result["success"],
         row_count=result["row_count"],
         error=result.get("error")
     )
 
-    # Step 5: Render Performance Metrics Cards
-    mcol1, mcol2, mcol3, mcol4 = st.columns(4)
-    with mcol1:
-        st.metric("Execution Latency", f"{result['execution_time_ms']:.2f} ms")
-    with mcol2:
-        st.metric("Rows Returned", result["row_count"])
-    with mcol3:
-        status_str = "SUCCESS" if result["success"] else "FAILED"
-        st.metric("Status", status_str)
-    with mcol4:
-        st.metric("Backend Engine", "C++ Core (v2.0)")
+    # Output
+    st.subheader("Result")
 
-    # Step 6: Render Tabular Results
-    st.markdown("### 📋 Query Results")
     if result["success"]:
-        df = result["dataframe"]
-        if not df.empty:
-            st.dataframe(df, use_container_width=True)
+        if not result["dataframe"].empty:
+            st.dataframe(result["dataframe"], use_container_width=True)
         else:
-            st.success("Query executed successfully. No rows returned.")
+            st.success("No rows returned")
     else:
-        st.error(f"❌ Execution Error: {result['error']}")
+        st.error(result["error"])
 
-# Query History Tab in Sidebar / Lower Accordion
+# ------------------ HISTORY ------------------
+
 st.divider()
-with st.expander("📜 Live Query Logs & Audit Trail"):
+
+with st.expander("Query Logs"):
     history = logger.get_history()
     if history:
-        history_df = pd.DataFrame(history)
-        st.dataframe(
-            history_df[["timestamp", "raw_query", "executed_sql", "duration_ms", "status", "row_count"]],
-            use_container_width=True,
-            hide_index=True
-        )
+        st.dataframe(pd.DataFrame(history))
     else:
-        st.info("No query logs recorded yet.")
+        st.info("No logs yet")

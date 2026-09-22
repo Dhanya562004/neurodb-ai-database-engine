@@ -1,5 +1,38 @@
 [
   {
+    "id": 4,
+    "timestamp": "2026-09-22 14:16:38",
+    "raw_query": "show students with marks greater than 80",
+    "executed_sql": "SELECT * FROM students WHERE marks > 80;",
+    "mode": "Natural Language (AI)",
+    "duration_ms": 23.17,
+    "status": "SUCCESS",
+    "row_count": 4,
+    "error": null
+  },
+  {
+    "id": 3,
+    "timestamp": "2026-09-22 14:16:31",
+    "raw_query": "SELECT * FROM users;\nSELECT * FROM users WHERE age > 25;",
+    "executed_sql": "SELECT * FROM users;\nSELECT * FROM users WHERE age > 25;",
+    "mode": "SQL Query",
+    "duration_ms": 27.42,
+    "status": "SUCCESS",
+    "row_count": 3,
+    "error": null
+  },
+  {
+    "id": 2,
+    "timestamp": "2026-09-22 14:15:21",
+    "raw_query": "show students with marks greater than 80",
+    "executed_sql": "SELECT * FROM students WHERE marks > 80;",
+    "mode": "Natural Language (AI)",
+    "duration_ms": 154.36,
+    "status": "SUCCESS",
+    "row_count": 4,
+    "error": null
+  },
+  {
     "id": 1,
     "timestamp": "2026-09-22 13:48:41",
     "raw_query": "test prompt",
